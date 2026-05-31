@@ -1,0 +1,67 @@
+# Python 字节码缓存
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# 虚拟环境
+venv/
+.venv/
+env/
+.env/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# 日志和数据库
+*.log
+*.sqlite
+*.db
+
+# 环境变量
+.env
+.env.local
+
+# 大文件和模型（需要用户自行下载）
+engines/
+models/
+build/
+
+# 调试图片和测试数据
+static/grab_offset_*.jpg
+static/offset_results.csv
+static/精度.csv
+debug_roi.jpg
+
+# 个人配置和标定数据
+calibration_data.json
+
+# 学术文档（整个docs目录）
+docs/
+
+# 本地配置
+.claude/settings.local.json
+.vscode/settings.json
+
+# 临时文件
+*.tmp
+*.temp
+.cache/
+
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+
+# 测试覆盖率
+htmlcov/
+.coverage
+
+# 分发
+dist/
+build/
+*.egg-info/

@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>中国象棋对战机器人</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=ZCOOL+XiaoWei&family=Noto+Serif+SC:wght@400;700&family=DM+Sans:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://cdn.socket.io/4.5.4/socket.io.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <!-- 顶部控制栏 -->
+        <header>
+            <div class="header-left">
+                <span class="header-label">摄像头</span>
+                <button id="btn-camera-start" class="btn btn-primary btn-xs">启动</button>
+                <button id="btn-camera-stop" class="btn btn-secondary btn-xs">停止</button>
+                <button id="btn-snapshot" class="btn btn-secondary btn-xs">拍照</button>
+            </div>
+            <h1>中国象棋对战机器人</h1>
+            <div class="header-right">
+                <span id="header-robot-status" class="header-status">机械臂: 未连接</span>
+            </div>
+        </header>
+
+        <div class="main-content">
+            <!-- 左侧: 视频流区域 -->
+            <div class="video-section">
+                <!-- 视频容器 -->
+                <div class="video-container">
+                    <img id="video-feed" src="/api/camera/feed" alt="摄像头画面">
+                    <div class="video-overlay" id="video-overlay"></div>
+                    <div id="mouse-coords" class="mouse-coords">坐标: (-, -)</div>
+                    <!-- 状态栏在视频底部 -->
+                    <div class="video-status-bar">
+                        <span id="status-text"><span class="status-dot"></span>等待中</span>
+                        <span id="player-text"><span class="status-dot red"></span>红方</span>
+                        <span id="calibration-text"><span class="status-dot"></span>未标定</span>
+                        <span id="robot-text"><span class="status-dot"></span>未连接</span>
+                    </div>
+                </div>
+
+                <!-- 游戏控制 -->
+                <div class="game-controls">
+                    <button id="btn-game-start" class="btn btn-success">开始游戏</button>
+                    <button id="btn-game-custom" class="btn btn-warning">自定义开局</button>
+                    <button id="btn-game-stop" class="btn btn-secondary">停止</button>
+                    <button id="btn-game-reset" class="btn btn-danger">重置</button>
+                    <button id="btn-scan-board" class="btn btn-info">扫描棋盘</button>
+                </div>
+
+                <!-- 日志 (紧凑) -->
+                <div class="log-section">
+                    <div class="log-header">
+                        <h3>日志</h3>
+                        <button id="btn-clear-log" class="btn btn-xs btn-ghost">清空</button>
+                    </div>
+                    <div id="log-output" class="log-output"></div>
+                </div>
+            </div>
+
+            <!-- 右侧: 控制面板 -->
+            <div class="control-section">
+                <!-- 机械臂控制 -->
+                <div class="panel robot-panel">
+                    <h2>机械臂</h2>
+                    <div class="panel-content robot-buttons">
+                        <button id="btn-robot-connect" class="btn btn-primary">连接</button>
+                        <button id="btn-robot-disconnect" class="btn btn-secondary">断开</button>
+                        <button id="btn-robot-zero" class="btn btn-secondary">回零</button>
+                    </div>
+                </div>
+
+                <!-- 棋子标定 (折叠) -->
+                <div class="collapsible-panel">
+                    <div class="collapsible-header" id="calibration-toggle">
+                        <h2>棋子标定</h2>
+                        <span class="calib-header-status" id="calib-header-status">未标定</span>
+                        <span class="toggle-icon">▶</span>
+                    </div>
+                    <div class="collapsible-content" id="calibration-content" style="display:none;">
+                        <div class="calib-section">
+                            <div class="calib-actions">
+                                <div class="calib-step">
+                                    <div class="step-header">
+                                        <span class="step-num">1</span>
+                                        <span class="step-title">开始标定</span>
+                                    </div>
+                                    <p class="step-desc">摄像头已启动、机械臂已连接</p>
+                                    <button id="btn-calib-start" class="btn btn-primary btn-xs">开始</button>
+                                </div>
+
+                                <div class="calib-step" id="calib-steps" style="display:none;">
+                                    <div class="step-header">
+                                        <span class="step-num">2</span>
+                                        <span class="step-title">放置标定点 <span id="calib-progress">(0/4)</span></span>
+                                    </div>
+                                    <p class="step-desc" id="calib-instruction">将棋子放到吸泵上</p>
+                                    <p class="step-coords" id="calib-pos-info"></p>
+                                    <button id="btn-calib-place" class="btn btn-secondary btn-xs">检测</button>
+                                    <div id="calib-last-point" class="last-point-info"></div>
+                                </div>
+
+                                <div class="calib-step" id="calib-result" style="display:none;">
+                                    <div class="step-header">
+                                        <span class="step-num success">✓</span>
+                                        <span class="step-title">完成</span>
+                                    </div>
+                                    <div id="calib-result-text" class="result-info"></div>
+                                    <button id="btn-calib-reset" class="btn btn-secondary btn-xs">重标</button>
+                                </div>
+                            </div>
+
+                            <div class="calib-extras">
+                                <div class="extra-row">
+                                    <span class="extra-label">测试</span>
+                                    <button id="btn-test-grab" class="btn btn-info btn-xs">抓取</button>
+                                    <button id="btn-test-offset" class="btn btn-info btn-xs">偏差</button>
+                                    <button id="btn-test-place" class="btn btn-info btn-xs">放置</button>
+                                    <button id="btn-test-reset-csv" class="btn btn-secondary btn-xs">重置CSV</button>
+                                </div>
+                                <div class="extra-row">
+                                    <span class="extra-label">棋盘</span>
+                                    <button id="btn-scan-board-corners" class="btn btn-info btn-xs">扫描</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- AI 控制 -->
+                <div class="panel">
+                    <h2>AI 控制</h2>
+                    <div class="panel-content">
+                        <div class="ai-row">
+                            <label>难度</label>
+                            <select id="ai-difficulty" class="select-input">
+                                <option value="1">1</option>
+                                <option value="5">5</option>
+                                <option value="10" selected>10</option>
+                                <option value="15">15</option>
+                                <option value="20">20</option>
+                            </select>
+                        </div>
+                        <div class="ai-row checkbox">
+                            <label><input type="checkbox" id="ai-engine" checked> 引擎</label>
+                        </div>
+                        <button id="btn-ai-move" class="btn btn-ai">AI 走棋</button>
+                    </div>
+                </div>
+
+                <!-- AI棋友 -->
+                <div class="panel" id="voice-panel">
+                    <h2>AI 棋友</h2>
+                    <div class="panel-content">
+                        <!-- 模式切换 -->
+                        <div class="mode-switch">
+                            <label class="radio-label">
+                                <input type="radio" name="voice-mode" value="commentary" checked>
+                                <span>解说模式</span>
+                            </label>
+                            <label class="radio-label">
+                                <input type="radio" name="voice-mode" value="session">
+                                <span>会话模式</span>
+                            </label>
+                        </div>
+
+                        <!-- 状态显示 -->
+                        <div class="voice-status-row">
+                            <span id="voice-status-text">待命</span>
+                            <span id="voice-speaking-indicator" class="indicator" style="display:none;">播报</span>
+                            <span id="voice-listening-indicator" class="indicator" style="display:none;">聆听</span>
+                        </div>
+
+                        <!-- 解说模式内容 -->
+                        <div id="commentary-mode-content">
+                            <!-- 解说角色选择 -->
+                            <div class="voice-row">
+                                <label>解说风格</label>
+                                <select id="commentary-character-selector" class="select-input-sm">
+                                    <option value="professional">专业解说</option>
+                                    <option value="humorous">幽默解说</option>
+                                </select>
+                            </div>
+                            <div class="commentary-box" id="commentary-display">
+                                <p class="placeholder">等待走棋...</p>
+                            </div>
+                            <div class="voice-setting">
+                                <label><input type="checkbox" id="voice-auto-commentary" checked> 自动解说走棋</label>
+                            </div>
+                            <!-- 解说监听控制 -->
+                            <div class="voice-setting" style="margin-top: 10px; padding-top: 10px; border-top: 1px solid #e0e0e0;">
+                                <label style="font-weight: bold;">语音触发走棋</label>
+                                <div class="voice-actions" style="margin-top: 5px;">
+                                    <button id="btn-commentary-listening-start" class="btn btn-primary btn-xs">开始监听</button>
+                                    <button id="btn-commentary-listening-stop" class="btn btn-secondary btn-xs" disabled>停止监听</button>
+                                    <span id="commentary-listening-status" class="status-indicator status-idle" style="margin-left: 8px;">未激活</span>
+                                </div>
+                                <p class="hint" style="margin-top: 5px; font-size: 11px; color: #666;">
+                                    启动后，说"下好了"自动触发走棋检测
+                                </p>
+                            </div>
+                        </div>
+
+                        <!-- 会话模式内容 -->
+                        <div id="session-mode-content" style="display:none;">
+                            <!-- 会话角色选择 -->
+                            <div class="voice-row">
+                                <label>对话角色</label>
+                                <select id="character-selector" class="select-input-sm">
+                                    <option value="novice_teacher">新手导师</option>
+                                    <option value="classical">古风棋手</option>
+                                    <option value="humorous_player">幽默棋手</option>
+                                    <option value="sarcastic">嘲讽棋手</option>
+                                </select>
+                            </div>
+                            <div class="dialogue-box" id="dialogue-history">
+                                <div class="dialogue-messages"></div>
+                            </div>
+                            <div class="voice-actions">
+                                <button id="btn-session-start" class="btn btn-primary btn-xs">开始会话</button>
+                                <button id="btn-session-stop" class="btn btn-secondary btn-xs" style="display:none;">结束会话</button>
+                                <button id="btn-voice-interrupt" class="btn btn-ghost btn-xs">打断</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 棋盘状态 -->
+                <div class="panel">
+                    <h2>棋盘</h2>
+                    <div class="panel-content">
+                        <div id="board-state" class="board-display">
+                            <p class="placeholder">扫描查看</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 走棋历史 -->
+                <div class="panel">
+                    <h2>历史</h2>
+                    <div class="panel-content">
+                        <div id="move-history" class="history-list">
+                            <p class="placeholder">无</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+</body>
+</html>
